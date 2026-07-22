@@ -344,6 +344,36 @@ code{background:var(--panel);border:1px solid var(--line);border-radius:2px;padd
 .tgrp{display:inline-flex;align-items:center;gap:4px;font-size:10px;letter-spacing:.14em;
   color:var(--dim);border:1px solid var(--line);padding:4px 8px;margin-right:2px}
 
+/* ---- slot machine ---- */
+.slotbox{display:flex;flex-direction:column;align-items:center;gap:18px;padding:24px 0 8px}
+.slotwin{position:relative;width:300px;height:64px;overflow:hidden;border:1px solid var(--line2);
+  border-radius:0;background:rgba(0,0,0,.55);box-shadow:inset 0 0 30px rgba(0,0,0,.8)}
+.slotreel{display:flex;flex-direction:column;will-change:transform}
+.slotcell{height:64px;display:flex;align-items:center;justify-content:center;text-align:center;
+  font-family:'Code','JetBrains Mono',monospace;font-size:18px;letter-spacing:.02em;color:var(--text);
+  padding:0 12px;line-height:1.1}
+.slotline{position:absolute;left:0;right:0;top:50%;height:64px;transform:translateY(-50%);
+  border-top:1px solid rgba(63,198,255,.5);border-bottom:1px solid rgba(63,198,255,.5);pointer-events:none}
+.slotwin::before,.slotwin::after{content:"";position:absolute;left:0;right:0;height:20px;z-index:2;pointer-events:none}
+.slotwin::before{top:0;background:linear-gradient(180deg,rgba(0,0,0,.9),transparent)}
+.slotwin::after{bottom:0;background:linear-gradient(0deg,rgba(0,0,0,.9),transparent)}
+.slotspin{width:auto;padding:12px 40px;font-size:15px;letter-spacing:.2em}
+.slotspin:disabled{opacity:.5}
+.slotout{min-height:34px;text-align:center}
+.slotwon{font-family:'Code','JetBrains Mono',monospace;font-size:24px;color:#FFD34D;letter-spacing:.02em;
+  text-shadow:-2px 0 rgba(255,46,95,.5),2px 0 rgba(63,198,255,.5)}
+
+/* prize editor */
+.slotedit{margin-top:26px;border-top:1px solid var(--line);padding-top:18px}
+.prizerack{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.prizerow{display:flex;align-items:center;gap:6px}
+.prizerow .pnum{width:22px;text-align:center;color:var(--dim);font-size:12px;flex-shrink:0}
+.prizerow .pin-name{flex:1;padding:8px 10px;font-size:13px;background:var(--panel);
+  border:1px solid var(--line2);color:var(--text)}
+.prizeadd{display:flex;gap:6px;margin-bottom:14px}
+.prizeadd input{flex:1;padding:8px 10px;font-size:13px;background:var(--panel);
+  border:1px solid var(--line2);color:var(--text)}
+
 .brand,.gate .g-brand,.confirm .big{font-family:'Code','JetBrains Mono',ui-monospace,monospace;}
 /* =========================================================
    COLD MODE — terminal base, color reserved for music moments
@@ -545,7 +575,7 @@ function buildBracket(){
 /* ---------- shared UI ---------- */
 function nav(active){
   function l(h,t){return '<a href="#'+h+'" class="'+(active===h?'on':'')+'">'+t+'</a>';}
-  return '<div class="modenav">'+l('enter','Enter')+l('bracket','Bracket')+l('archive','Archive')+l('board','Board')+(PIN?l('timer','Timer')+l('versus','Versus'):'')+'</div>';
+  return '<div class="modenav">'+l('enter','Enter')+l('bracket','Bracket')+l('archive','Archive')+l('board','Board')+(PIN?l('slot','Slot')+l('timer','Timer')+l('versus','Versus'):'')+'</div>';
 }
 function pill(){
   if(B.state==='entries'){
@@ -944,6 +974,97 @@ function renderVersus(){
   });
 }
 
+
+/* ---------- SLOT MACHINE (PIN-gated, standalone) ---------- */
+var SLOT_PRIZES=[];
+var slotSpinning=false;
+function loadSlotPrizes(cb){
+  sb.from("bb_slot").select("prizes").eq("id",1).single().then(function(r){
+    if(!r.error&&r.data&&Array.isArray(r.data.prizes)) SLOT_PRIZES=r.data.prizes;
+    if(cb) cb();
+  });
+}
+function renderSlot(){
+  if(!PIN){ renderGate(); return; }
+  app.innerHTML='<div class="wrap">'+mast('SLOT')+nav('slot')+
+    '<div id="slotzone"><div class="empty">Loading prizes\u2026</div></div>'+
+    '<div class="foot"><span>v1.0</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
+  loadSlotPrizes(function(){ paintSlot(); });
+}
+function paintSlot(){
+  var z=document.getElementById("slotzone"); if(!z) return;
+  if(!SLOT_PRIZES.length){
+    z.innerHTML='<div class="empty"><b>No prizes yet.</b>Add some below to start spinning.</div>'+slotEditor();
+    wireEditor(); return;
+  }
+  z.innerHTML=
+    '<div class="slotbox">'+
+      '<div class="slotwin"><div class="slotreel" id="reel"><div class="slotcell result">'+esc(SLOT_PRIZES[0])+'</div></div><div class="slotline"></div></div>'+
+      '<button class="btn slotspin" id="spinbtn">SPIN</button>'+
+      '<div class="slotout" id="slotout"></div>'+
+    '</div>'+
+    slotEditor();
+  document.getElementById("spinbtn").onclick=spinSlot;
+  wireEditor();
+}
+function spinSlot(){
+  if(slotSpinning||!SLOT_PRIZES.length) return;
+  slotSpinning=true;
+  var out=document.getElementById("slotout"); out.textContent="";
+  var reel=document.getElementById("reel");
+  var spinbtn=document.getElementById("spinbtn"); spinbtn.disabled=true;
+  var winner=Math.floor(Math.random()*SLOT_PRIZES.length);
+  // build a long strip that ends on the winner
+  var strip=[], loops=12;
+  for(var i=0;i<loops;i++){ for(var j=0;j<SLOT_PRIZES.length;j++) strip.push(SLOT_PRIZES[j]); }
+  for(var k=0;k<=winner;k++) strip.push(SLOT_PRIZES[k]);
+  reel.innerHTML=strip.map(function(p,idx){return '<div class="slotcell'+(idx===strip.length-1?' result':'')+'">'+esc(p)+'</div>';}).join('');
+  var cellH=64, total=(strip.length-1)*cellH;
+  reel.style.transition="none"; reel.style.transform="translateY(0)";
+  reel.offsetHeight; // reflow
+  reel.style.transition="transform 3.6s cubic-bezier(.12,.75,.16,1)";
+  reel.style.transform="translateY(-"+total+"px)";
+  setTimeout(function(){
+    slotSpinning=false; spinbtn.disabled=false;
+    out.innerHTML='<span class="slotwon">\uD83C\uDFB0 '+esc(SLOT_PRIZES[winner])+'</span>';
+  },3700);
+}
+function slotEditor(){
+  return '<div class="slotedit"><div class="seclabel">Prizes <span class="ct">'+SLOT_PRIZES.length+'</span></div>'+
+    '<div class="prizerack" id="prizerack">'+
+      SLOT_PRIZES.map(function(p,i){
+        return '<div class="prizerow"><span class="pnum">'+(i+1)+'</span>'+
+          '<input class="pin-name" data-i="'+i+'" value="'+esc(p).replace(/"/g,"&quot;")+'">'+
+          '<button class="miniact" data-up="'+i+'">\u2191</button>'+
+          '<button class="miniact" data-dn="'+i+'">\u2193</button>'+
+          '<button class="kill" data-del="'+i+'">\u2715</button></div>';
+      }).join('')+
+    '</div>'+
+    '<div class="prizeadd"><input id="newprize" placeholder="new prize\u2026" maxlength="60"><button class="miniact" id="addprize">Add</button></div>'+
+    '<button class="btn slim" id="saveprizes">Save prizes</button>'+
+    '<span class="hint" id="savemsg" style="margin-left:10px"></span></div>';
+}
+function wireEditor(){
+  var rack=document.getElementById("prizerack"); if(!rack) return;
+  function commit(newList){ SLOT_PRIZES=newList; paintSlot(); }
+  rack.querySelectorAll("[data-del]").forEach(function(b){ b.onclick=function(){ var i=+b.getAttribute("data-del"); commit(SLOT_PRIZES.filter(function(_,x){return x!==i;})); }; });
+  rack.querySelectorAll("[data-up]").forEach(function(b){ b.onclick=function(){ var i=+b.getAttribute("data-up"); if(i<=0)return; var a=SLOT_PRIZES.slice(); var t=a[i-1];a[i-1]=a[i];a[i]=t; commit(a); }; });
+  rack.querySelectorAll("[data-dn]").forEach(function(b){ b.onclick=function(){ var i=+b.getAttribute("data-dn"); if(i>=SLOT_PRIZES.length-1)return; var a=SLOT_PRIZES.slice(); var t=a[i+1];a[i+1]=a[i];a[i]=t; commit(a); }; });
+  rack.querySelectorAll(".pin-name").forEach(function(inp){ inp.onchange=function(){ var i=+inp.getAttribute("data-i"); var a=SLOT_PRIZES.slice(); a[i]=inp.value.trim(); SLOT_PRIZES=a; }; });
+  var add=document.getElementById("addprize"), np=document.getElementById("newprize");
+  if(add) add.onclick=function(){ var v=np.value.trim(); if(!v)return; SLOT_PRIZES=SLOT_PRIZES.concat([v]); paintSlot(); };
+  if(np) np.onkeydown=function(e){ if(e.key==="Enter"&&add) add.click(); };
+  var save=document.getElementById("saveprizes");
+  if(save) save.onclick=function(){
+    var clean=SLOT_PRIZES.map(function(p){return (p||"").trim();}).filter(Boolean);
+    sb.rpc("bb_slot_save",{p_pin:PIN,p_prizes:clean}).then(function(r){
+      var m=document.getElementById("savemsg");
+      if(r.error){ if(m){m.innerHTML='<b class="bad">Save failed.</b>';} }
+      else { SLOT_PRIZES=clean; if(m){m.textContent="Saved \u2713"; setTimeout(function(){var mm=document.getElementById("savemsg"); if(mm)mm.textContent="";},1500);} }
+    });
+  };
+}
+
 /* ---------- mount ---------- */
 function render(){
   document.body.classList.remove("overlay");
@@ -954,6 +1075,7 @@ function render(){
   else if(r==="board") renderBoard();
   else if(r==="timer") renderTimerOverlay();
   else if(r==="versus") renderVersus();
+  else if(r==="slot") renderSlot();
   else if(r==="overlay") renderOverlay();
   else renderEnter();
   emit();
