@@ -133,7 +133,6 @@ input:focus,textarea:focus{outline:none;border-color:var(--electric);
 @media (prefers-reduced-motion:reduce){
   .meter i,.ovl .mtr i{animation:none;width:70%}
   .ovl .now .h,.match.next{animation:none}
-  .slotreel{transition:none!important}
 }
 
 .seclabel{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);
@@ -354,7 +353,8 @@ code{background:var(--panel);border:1px solid var(--line);border-radius:2px;padd
 .slotreel{display:flex;flex-direction:column;will-change:transform}
 .slotcell{height:64px;display:flex;align-items:center;justify-content:center;text-align:center;
   font-family:'Code','JetBrains Mono',monospace;font-size:18px;letter-spacing:.02em;color:var(--text);
-  padding:0 12px;line-height:1.1}
+  padding:0 12px;line-height:1.1;white-space:nowrap;overflow:hidden}
+.slotcell.result{color:var(--gold);text-shadow:0 0 12px rgba(255,211,77,.4)}
 .slotline{position:absolute;left:0;right:0;top:50%;height:64px;transform:translateY(-50%);
   border-top:1px solid rgba(63,198,255,.5);border-bottom:1px solid rgba(63,198,255,.5);pointer-events:none}
 .slotwin::before,.slotwin::after{content:"";position:absolute;left:0;right:0;height:20px;z-index:2;pointer-events:none}
@@ -362,6 +362,8 @@ code{background:var(--panel);border:1px solid var(--line);border-radius:2px;padd
 .slotwin::after{bottom:0;background:linear-gradient(0deg,rgba(0,0,0,.9),transparent)}
 .slotspin{width:auto;padding:12px 40px;font-size:15px;letter-spacing:.2em}
 .slotspin:disabled{opacity:.5}
+.slotctl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center}
+.slotmute{font-size:11px;letter-spacing:.1em}
 .slotout{min-height:34px;text-align:center}
 .slotwon{font-family:'Code','JetBrains Mono',monospace;font-size:24px;color:#FFD34D;letter-spacing:.02em;
   text-shadow:-2px 0 rgba(255,46,95,.5),2px 0 rgba(63,198,255,.5)}
@@ -1005,6 +1007,44 @@ function renderVersus(){
 /* ---------- SLOT MACHINE (PIN-gated, weighted, masked reels) ---------- */
 var SLOT_PRIZES=[];   // [{name, weight}]
 var slotSpinning=false;
+
+/* ---- slot sound (synthesized, no assets; muteable) ---- */
+var _actx=null;
+function slotMuted(){ return localStorage.getItem("bb_slot_mute")==="1"; }
+function audio(){
+  try{
+    if(!_actx){ var AC=window.AudioContext||window.webkitAudioContext; if(!AC) return null; _actx=new AC(); }
+    if(_actx.state==="suspended"&&_actx.resume) _actx.resume();
+    return _actx;
+  }catch(e){ return null; }
+}
+function slotTicks(n,dur){
+  if(slotMuted()) return; var ctx=audio(); if(!ctx) return;
+  var t0=ctx.currentTime;
+  for(var k=1;k<=n;k++){
+    var d=k/n, tt=(1-Math.pow(1-d,1/3))*dur;   // ticks spread out as it slows
+    var o=ctx.createOscillator(), g=ctx.createGain(), w=t0+tt;
+    o.type="square"; o.frequency.value=1250-380*d;
+    g.gain.setValueAtTime(0.0001,w);
+    g.gain.exponentialRampToValueAtTime(0.13,w+0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001,w+0.05);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(w); o.stop(w+0.06);
+  }
+}
+function slotChime(){
+  if(slotMuted()) return; var ctx=audio(); if(!ctx) return;
+  var t0=ctx.currentTime, notes=[523.25,659.25,783.99,1046.50];
+  notes.forEach(function(fr,i){
+    var o=ctx.createOscillator(), g=ctx.createGain(), w=t0+i*0.085;
+    o.type="triangle"; o.frequency.value=fr;
+    g.gain.setValueAtTime(0.0001,w);
+    g.gain.exponentialRampToValueAtTime(0.2,w+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,w+0.5);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(w); o.stop(w+0.55);
+  });
+}
 function normPrizes(arr){
   return (arr||[]).map(function(p){
     if(typeof p==='string') return {name:p, weight:10};
@@ -1038,12 +1078,17 @@ function paintSlot(){
   }
   z.innerHTML=
     '<div class="slotbox">'+
-      '<div class="slotwin"><div class="slotreel" id="reel"><div class="slotcell masked">\u2588\u2588\u2588\u2588\u2588</div></div><div class="slotline"></div></div>'+
-      '<button class="btn slotspin" id="spinbtn">SPIN</button>'+
+      '<div class="slotwin"><div class="slotreel" id="reel"><div class="slotcell">'+esc(SLOT_PRIZES[0].name)+'</div></div><div class="slotline"></div></div>'+
+      '<div class="slotctl"><button class="btn slotspin" id="spinbtn">SPIN</button>'+
+        '<button class="miniact slotmute" id="slotmute" aria-label="Toggle slot sound"></button></div>'+
       '<div class="slotout" id="slotout"></div>'+
     '</div>'+
     '<div class="hint" style="text-align:center;margin-top:14px">Edit prizes &amp; odds in the <a href="#prizes" style="color:var(--electric)">Prizes</a> tab.</div>';
   document.getElementById("spinbtn").onclick=spinSlot;
+  var mb=document.getElementById("slotmute");
+  function paintMute(){ mb.textContent=slotMuted()?"\ud83d\udd07 Muted":"\ud83d\udd0a Sound"; mb.title=slotMuted()?"Sound off":"Sound on"; }
+  paintMute();
+  mb.onclick=function(){ localStorage.setItem("bb_slot_mute", slotMuted()?"0":"1"); paintMute(); if(!slotMuted()) audio(); };
 }
 function spinSlot(){
   if(slotSpinning||!SLOT_PRIZES.length) return;
@@ -1053,24 +1098,25 @@ function spinSlot(){
   var spinbtn=document.getElementById("spinbtn"); spinbtn.disabled=true;
   var winner=pickWeighted();
   var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  // reels are MASKED during the spin: every cell shows blocks, not names
-  var cells=90;
-  var strip=[];
-  for(var i=0;i<cells;i++) strip.push('\u2588\u2588\u2588\u2588\u2588');
-  reel.innerHTML=strip.map(function(){return '<div class="slotcell masked">\u2588\u2588\u2588\u2588\u2588</div>';}).join('');
-  var cellH=64, total=(strip.length-1)*cellH;
+  var dur=reduce?1.4:3.9, cellH=64, loops=reduce?6:18;
+  // roll through the real prize names, landing on the winner in the last cell
+  var seq=[];
+  for(var i=0;i<loops;i++) seq.push(SLOT_PRIZES[i%SLOT_PRIZES.length]);
+  seq.push(SLOT_PRIZES[winner]);
+  reel.innerHTML=seq.map(function(p,i){
+    return '<div class="slotcell'+(i===seq.length-1?' result':'')+'">'+esc(p.name)+'</div>';
+  }).join('');
+  var total=(seq.length-1)*cellH;
   reel.style.transition="none"; reel.style.transform="translateY(0)";
   reel.offsetHeight;
-  reel.style.transition="transform "+(reduce?"0.6s":"3.6s")+" cubic-bezier(.12,.75,.16,1)";
+  reel.style.transition="transform "+dur+"s cubic-bezier(.16,.84,.24,1)";
   reel.style.transform="translateY(-"+total+"px)";
+  slotTicks(seq.length, dur);
   setTimeout(function(){
-    // reveal: swap the landed cell to the real prize
-    reel.style.transition="none";
-    reel.innerHTML='<div class="slotcell result">'+esc(SLOT_PRIZES[winner].name)+'</div>';
-    reel.style.transform="translateY(0)";
     slotSpinning=false; spinbtn.disabled=false;
     out.innerHTML='<span class="slotwon">\uD83C\uDFB0 '+esc(SLOT_PRIZES[winner].name)+'</span>';
-  },reduce?700:3700);
+    slotChime();
+  }, Math.round(dur*1000)+140);
 }
 function renderPrizes(){
   if(!PIN){ renderGate(); return; }
