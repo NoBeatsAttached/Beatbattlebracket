@@ -1123,7 +1123,7 @@ function spinSlot(){
   var spinbtn=document.getElementById("spinbtn"); spinbtn.disabled=true;
   var winner=pickWeighted();
   var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var dur=reduce?2.0:5.6, cellH=64, loops=reduce?9:30;
+  var dur=reduce?2.6:8.2, cellH=64, loops=reduce?12:46;
   // roll through the real prize names, landing on the winner in the last cell
   var seq=[];
   for(var i=0;i<loops;i++) seq.push(SLOT_PRIZES[i%SLOT_PRIZES.length]);
@@ -1134,7 +1134,7 @@ function spinSlot(){
   var total=(seq.length-1)*cellH;
   reel.style.transition="none"; reel.style.transform="translateY(0)";
   reel.offsetHeight;
-  reel.style.transition="transform "+dur+"s cubic-bezier(.16,.84,.24,1)";
+  reel.style.transition="transform "+dur+"s cubic-bezier(.09,.82,.10,1)";
   reel.style.transform="translateY(-"+total+"px)";
   slotTicks(seq.length, dur);
   setTimeout(function(){
