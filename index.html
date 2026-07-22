@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#030303" />
+<meta name="description" content="G's & VIP's Beat Battle — live producer bracket, voting, and stream overlays." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23030303'/%3E%3Ctext x='16' y='24' font-size='22' text-anchor='middle' fill='%233FC6FF'%3E%E2%99%9B%3C/text%3E%3C/svg%3E" />
 <title>PR0CESS_LIVE // BEAT BATTLE</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -130,7 +132,8 @@ input:focus,textarea:focus{outline:none;border-color:var(--electric);
 @keyframes vu{from{width:22%}to{width:92%}}
 @media (prefers-reduced-motion:reduce){
   .meter i,.ovl .mtr i{animation:none;width:70%}
-  .ovl .now .h{animation:none}
+  .ovl .now .h,.match.next{animation:none}
+  .slotreel{transition:none!important}
 }
 
 .seclabel{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);
@@ -645,8 +648,8 @@ function renderEnter(){
       return; }
     if(built) return; built=true;
     z.innerHTML=(deadlineSet()?'<div class="twrap tbanner"><span class="tlab">'+timerLabel()+'</span><span class="tval">--:--</span><span class="tsub">'+(B.timer_label==='cook'?'flip the sample \u2014 upload window comes after':'get it on SoundCloud and entered before zero')+'</span></div>':'')+
-      '<div class="field"><label>Producer handle <span class="req">*</span></label><input id="e-handle" type="text" maxlength="40" placeholder="@yourhandle"></div>'+
-      '<div class="field"><label>SoundCloud link <span class="req">*</span></label><input id="e-link" type="url" placeholder="soundcloud.com/you/your-battle-track"></div>'+
+      '<div class="field"><label>Producer handle <span class="req">*</span></label><input id="e-handle" type="text" maxlength="40" placeholder="@yourhandle" autocapitalize="none" autocomplete="off" spellcheck="false"></div>'+
+      '<div class="field"><label>SoundCloud link <span class="req">*</span></label><input id="e-link" type="url" placeholder="soundcloud.com/you/your-battle-track" inputmode="url" autocapitalize="none" autocomplete="off" spellcheck="false"></div>'+
       '<div class="field"><label>Defending champ? Enter your code</label><input id="e-code" type="password" placeholder="leave blank unless you won last week" autocomplete="off"></div>'+
       '<button class="btn" id="e-send">Enter the battle</button>'+
       '<div class="hint" id="e-err"></div>'+
@@ -680,6 +683,10 @@ function renderEnter(){
         else err.innerHTML='<b class="bad">Couldn\u2019t enter \u2014 try again.</b>';
       });
     };
+    ["e-handle","e-link","e-code"].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el) el.onkeydown=function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); var s=document.getElementById("e-send"); if(s&&!s.disabled) s.click(); } };
+    });
   });
 }
 
@@ -747,7 +754,6 @@ function renderBoard(){
     var el=document.getElementById("champrow");
     if(el){
       el.style.display="";
-      var hasCode = B.champ_code_set===true; // set via refresh below
       sb.from("bb_battle").select("champ_code").eq("id",1).single().then(function(r){
         var isSet = !!(r.data && r.data.champ_code);
         el.innerHTML='Champ code: <b class="'+(isSet?'goldtxt':'bad')+'">'+(isSet?'SET \u2713':'NOT SET')+'</b>'+
@@ -786,7 +792,7 @@ function renderBoard(){
           return '<div class="strip'+(e.is_champ?' goldstrip':'')+'"><div class="num">'+(e.is_champ?'\u265b':'\u00b7')+'</div><div class="body">'+
             '<div class="who">'+esc(e.handle)+(e.is_champ?' <span class="goldtxt" style="font-size:10px;letter-spacing:.1em">CHAMP</span>':'')+'</div>'+
             '<div class="meta">'+(linkOf(e.id)?'<a href="'+esc(linkOf(e.id))+'" target="_blank" rel="noopener">open track \u2197</a>':'<span class="hint">unlocking\u2026</span>')+'</div></div>'+
-            '<div class="acts"><button class="kill" data-rm="'+e.id+'">\u2715</button></div></div>';
+            '<div class="acts"><button class="kill" data-rm="'+e.id+'" aria-label="Remove '+esc(e.handle)+'" title="Remove entrant">\u2715</button></div></div>';
         }).join(''):'<div class="empty">Nobody in yet \u2014 drop the entry link in chat.</div>')+'</div>';
       var lk=document.getElementById("lockit");
       if(lk) lk.onclick=function(){
@@ -834,14 +840,15 @@ function renderBoard(){
     function fSide(m,s,e){
       var v=s==='a'?m.votes_a:m.votes_b;
       var won=m.winner===s;
+      var who=e?esc(e.handle):(s==='a'?'left':'right');
       return '<div class="fside'+(won?' won':'')+(e&&e.is_champ?' champ-side':'')+'">'+
         '<div class="fcorner">'+(e&&e.is_champ?'\u265B CHAMP':roundName(m.round,R))+'</div>'+
         '<div class="fname">'+(e?esc(e.handle):'\u2014')+'</div>'+
         (e&&linkOf(e.id)?'<a class="ftrack" href="'+esc(linkOf(e.id))+'" target="_blank" rel="noopener">play track \u2197</a>':'')+
-        '<div class="fvotes">'+v+'</div>'+
+        '<div class="fvotes" aria-label="'+who+' votes: '+v+'">'+v+'</div>'+
         '<div class="frow">'+
-          '<button class="vb" data-v="'+m.id+'" data-s="'+s+'" data-d="-1">\u2212</button>'+
-          '<button class="vb" data-v="'+m.id+'" data-s="'+s+'" data-d="1">+</button>'+
+          '<button class="vb" data-v="'+m.id+'" data-s="'+s+'" data-d="-1" aria-label="Remove a vote from '+who+'" title="Remove a vote">\u2212</button>'+
+          '<button class="vb" data-v="'+m.id+'" data-s="'+s+'" data-d="1" aria-label="Add a vote for '+who+'" title="Add a vote">+</button>'+
           (isOwner()&&!m.winner?'<button class="wb" data-w="'+m.id+'" data-s="'+s+'">WINNER</button>':'')+
         '</div></div>';
     }
@@ -1045,6 +1052,7 @@ function spinSlot(){
   var reel=document.getElementById("reel");
   var spinbtn=document.getElementById("spinbtn"); spinbtn.disabled=true;
   var winner=pickWeighted();
+  var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   // reels are MASKED during the spin: every cell shows blocks, not names
   var cells=90;
   var strip=[];
@@ -1053,7 +1061,7 @@ function spinSlot(){
   var cellH=64, total=(strip.length-1)*cellH;
   reel.style.transition="none"; reel.style.transform="translateY(0)";
   reel.offsetHeight;
-  reel.style.transition="transform 3.6s cubic-bezier(.12,.75,.16,1)";
+  reel.style.transition="transform "+(reduce?"0.6s":"3.6s")+" cubic-bezier(.12,.75,.16,1)";
   reel.style.transform="translateY(-"+total+"px)";
   setTimeout(function(){
     // reveal: swap the landed cell to the real prize
@@ -1062,7 +1070,7 @@ function spinSlot(){
     reel.style.transform="translateY(0)";
     slotSpinning=false; spinbtn.disabled=false;
     out.innerHTML='<span class="slotwon">\uD83C\uDFB0 '+esc(SLOT_PRIZES[winner].name)+'</span>';
-  },3700);
+  },reduce?700:3700);
 }
 function renderPrizes(){
   if(!PIN){ renderGate(); return; }
@@ -1085,9 +1093,9 @@ function slotEditor(){
           '<input class="pin-name" data-i="'+i+'" value="'+esc(p.name).replace(/"/g,"&quot;")+'">'+
           '<input class="pin-wt" data-w="'+i+'" type="number" min="1" value="'+p.weight+'">'+
           '<span class="podds">'+pct.toFixed(1)+'%</span>'+
-          '<button class="miniact" data-up="'+i+'">\u2191</button>'+
-          '<button class="miniact" data-dn="'+i+'">\u2193</button>'+
-          '<button class="kill" data-del="'+i+'">\u2715</button></div>';
+          '<button class="miniact" data-up="'+i+'" aria-label="Move up" title="Move up">\u2191</button>'+
+          '<button class="miniact" data-dn="'+i+'" aria-label="Move down" title="Move down">\u2193</button>'+
+          '<button class="kill" data-del="'+i+'" aria-label="Delete prize" title="Delete prize">\u2715</button></div>';
       }).join('')+
     '</div>'+
     '<div class="prizeadd"><input id="newprize" placeholder="new prize\u2026" maxlength="60"><input id="newwt" type="number" min="1" value="10" title="weight"><button class="miniact" id="addprize">Add</button></div>'+
