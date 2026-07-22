@@ -474,6 +474,10 @@ input:focus,textarea:focus{border-color:var(--electric);box-shadow:0 0 0 1px var
 .confirm{border-color:#14506B;background:var(--electric-soft);box-shadow:0 0 18px rgba(63,198,255,.12)}
 .confirm .big,.confirm .pos{color:var(--electric);text-shadow:-1.5px 0 rgba(255,46,95,.5),1.5px 0 rgba(63,198,255,.5)}
 
+
+.miniact.dooron{color:var(--electric);border-color:#14506b;font-weight:700}
+.miniact.dooroff{color:var(--hot);border-color:#5c1526;font-weight:700}
+.miniact.dooron:hover,.miniact.dooroff:hover{filter:brightness(1.25)}
 </style>
 </head>
 <body>
@@ -492,7 +496,7 @@ function esc(s){return (s||"").replace(/[&<>"']/g,function(c){return {'&':'&amp;
 function route(){return location.hash.replace("#","").split("?")[0]||"enter";}
 
 /* ---------- state ---------- */
-var B={state:'entries',champ_code:null,champ_name:null,active_match:null};
+var B={state:'entries',champ_code:null,champ_name:null,active_match:null,subs_open:false};
 var LINKS={};
 var ENT=[], M=[];
 var listeners=[];
@@ -621,6 +625,7 @@ function nav(active){
 }
 function pill(){
   if(B.state==='entries'){
+    if(!B.subs_open) return '<span class="statuspill closed">Submissions closed</span>';
     if(uploadExpired()) return '<span class="statuspill closed">Entries closed · '+ENT.length+' in</span>';
     return '<span class="statuspill open">Entries open · '+ENT.length+' in</span>';
   }
@@ -657,6 +662,9 @@ function renderEnter(){
   onState(function(){
     var p=document.querySelector(".statuspill"); if(p) p.outerHTML=pill();
     var z=document.getElementById("zone"); if(!z) return;
+    if(B.state==='entries'&&!B.subs_open){ built=false;
+      z.innerHTML='<div class="empty"><b>Submissions are closed.</b>The next Beat Battle isn\u2019t open yet \u2014 watch the stream and the Discord for when the door opens. Follow the socials so you don\u2019t miss it.</div>';
+      return; }
     if(B.state==='entries'&&uploadExpired()){ built=false;
       z.innerHTML='<div class="empty"><b>Upload window closed.</b>Entries are done · the bracket drops any minute. Stay in the stream.</div>';
       return; }
@@ -696,6 +704,7 @@ function renderEnter(){
         else if(/champ already/i.test(m)) err.innerHTML='<b class="bad">The champ already checked in.</b>';
         else if(/bb_one_per_handle|duplicate/i.test(m)) err.innerHTML='<b class="bad">That handle\u2019s already entered.</b>';
         else if(/duplicate track/i.test(m)) err.innerHTML='<b class="bad">That track\u2019s already entered in this battle.</b>';
+        else if(/subs closed/i.test(m)) err.innerHTML='<b class="bad">Submissions are closed right now.</b>';
         else if(/time up/i.test(m)) err.innerHTML='<b class="bad">Time\u2019s up \u2014 the upload window closed.</b>';
         else if(/entries closed/i.test(m)) err.innerHTML='<b class="bad">Entries just closed.</b>';
         else if(/soundcloud/i.test(m)) err.innerHTML='<b class="bad">SoundCloud links only.</b>';
@@ -792,7 +801,9 @@ function renderBoard(){
     var tb=document.getElementById("topbar"); if(!tb) return;
     var z=document.getElementById("zone");
     if(B.state==='entries'){
-      tb.innerHTML=(isOwner()?'<button class="btn slim" id="lockit"'+(ENT.length<2?' disabled':'')+'>Lock bracket & seed ('+ENT.length+')</button>':'<span class="hint">Entries open \u2014 '+ENT.length+' in. Host locks when ready.</span>')+
+      tb.innerHTML=
+        '<button class="miniact '+(B.subs_open?'dooron':'dooroff')+'" id="doorbtn">'+(B.subs_open?'\u25CF Subs OPEN \u2014 close':'Subs CLOSED \u2014 open')+'</button>'+
+        (isOwner()?'<button class="btn slim" id="lockit"'+(ENT.length<2?' disabled':'')+'>Lock bracket & seed ('+ENT.length+')</button>':'<span class="hint">Entries open \u2014 '+ENT.length+' in. Host locks when ready.</span>')+
         (deadlineSet()?'<span class="twrap tmini">\u23F1 '+timerLabel()+' <span class="tval">--:--</span></span>':'')+
         '<span class="tgrp">COOK <button class="miniact" data-t="cook:15">+15</button><button class="miniact" data-t="cook:30">+30</button><button class="miniact" data-t="cook:60">+60</button></span>'+
         '<span class="tgrp">UPLOAD <button class="miniact" data-t="upload:5">+5</button><button class="miniact" data-t="upload:10">+10</button></span>'+
@@ -813,6 +824,8 @@ function renderBoard(){
             '<div class="meta">'+(linkOf(e.id)?'<a href="'+esc(linkOf(e.id))+'" target="_blank" rel="noopener">open track \u2197</a>':'<span class="hint">unlocking\u2026</span>')+'</div></div>'+
             '<div class="acts"><button class="kill" data-rm="'+e.id+'" aria-label="Remove '+esc(e.handle)+'" title="Remove entrant">\u2715</button></div></div>';
         }).join(''):'<div class="empty">Nobody in yet \u2014 drop the entry link in chat.</div>')+'</div>';
+      var db=document.getElementById("doorbtn");
+      if(db) db.onclick=function(){ admin(B.subs_open?"close_subs":"open_subs"); };
       var lk=document.getElementById("lockit");
       if(lk) lk.onclick=function(){
         if(!confirm("Lock entries and seed the bracket for "+ENT.length+" producers?")) return;
