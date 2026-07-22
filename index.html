@@ -135,6 +135,23 @@ input:focus,textarea:focus{outline:none;border-color:var(--electric);
   .ovl .now .h,.match.next{animation:none}
 }
 
+/* ---- archive accordion ---- */
+.arcgroup{border:1px solid var(--line);border-radius:3px;background:var(--panel);margin-bottom:8px;overflow:hidden}
+.arcgroup[open]{border-color:var(--line2)}
+.arcsum{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;list-style:none;
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.arcsum::-webkit-details-marker{display:none}
+.arcsum:hover{background:var(--panel-2)}
+.arcsum:focus-visible{outline:1px solid var(--electric);outline-offset:-1px}
+.arccaret{color:var(--electric);display:inline-block;transition:transform .18s ease;font-size:12px}
+.arcgroup[open] .arccaret{transform:rotate(90deg)}
+.arcdate{color:var(--text)}
+.arcspacer{flex:1}
+.arccount{color:var(--dimmer);font-size:10px;letter-spacing:.1em;white-space:nowrap}
+.arcbody{margin:0;padding:2px 10px 12px}
+.arcgroup:not([open]) > .arcbody{display:none}
+@media (prefers-reduced-motion:reduce){.arccaret{transition:none}}
+
 .seclabel{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);
   margin:26px 0 11px;display:flex;align-items:center;gap:10px}
 .seclabel::after{content:"";flex:1;height:1px;background:var(--line)}
@@ -635,7 +652,7 @@ function copyText(t, btn){
 
 function renderEnter(){
   app.innerHTML='<div class="wrap">'+mast('')+nav('enter')+'<div id="zone"></div>'+
-    '<div class="foot"><span>v1.0</span><span>BEAT BATTLE</span></div></div>';
+    '<div class="foot"><span>v1.1</span><span>BEAT BATTLE</span></div></div>';
   var built=false;
   onState(function(){
     var p=document.querySelector(".statuspill"); if(p) p.outerHTML=pill();
@@ -737,7 +754,7 @@ function bracketHTML(interactive){
 }
 function renderBracket(){
   app.innerHTML='<div class="wrap wide">'+mast('LIVE BRACKET')+nav('bracket')+'<div id="zone"></div>'+
-    '<div class="foot"><span>v1.0</span><span>BEAT BATTLE</span></div></div>';
+    '<div class="foot"><span>v1.1</span><span>BEAT BATTLE</span></div></div>';
   onState(function(){
     var p=document.querySelector(".statuspill"); if(p) p.outerHTML=pill();
     var z=document.getElementById("zone"); if(z) z.innerHTML=bracketHTML(false);
@@ -751,7 +768,7 @@ function renderBoard(){
     '<div class="dashbar" id="topbar"></div>'+
     '<div id="champrow" class="cmdref" style="display:none"></div>'+
     '<div id="zone"></div>'+
-    '<div class="foot"><span>v1.0</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
+    '<div class="foot"><span>v1.1</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
   if(isOwner()){
     var el=document.getElementById("champrow");
     if(el){
@@ -914,7 +931,7 @@ function renderOverlay(){
 function renderArchive(){
   app.innerHTML='<div class="wrap wide">'+mast('ARCHIVE')+nav('archive')+
     '<div id="zone"><div class="empty">Loading past battles\u2026</div></div>'+
-    '<div class="foot"><span>v1.0</span><span>BEAT BATTLE</span></div></div>';
+    '<div class="foot"><span>v1.1</span><span>BEAT BATTLE</span></div></div>';
   sb.from("bb_archive").select("*").order("battle_ts",{ascending:false}).order("won",{ascending:false}).order("handle")
   .then(function(r){
     var z=document.getElementById("zone"); if(!z) return;
@@ -933,20 +950,27 @@ function renderArchive(){
       var d=new Date(k);
       var when=d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
       var champ=rows.filter(function(x){return x.won;})[0];
-      html+='<div class="seclabel">'+when+(champ?' \u00b7 <span class="goldtxt">\u265B '+esc(champ.handle)+'</span>':'')+
-        '<button class="miniact" data-cp="'+gi+'" style="margin-left:auto">Copy for Discord</button>'+
-        (isOwner()?'<button class="miniact danger" data-del="'+gi+'">\u2715</button>':'')+'</div>'+
-        '<div class="rack" style="margin-bottom:20px">'+
+      html+='<details class="arcgroup"'+(gi===0?' open':'')+'>'+
+        '<summary class="arcsum"><span class="arccaret">\u25B8</span>'+
+          '<span class="arcdate">'+when+'</span>'+
+          (champ?'<span class="goldtxt">\u265B '+esc(champ.handle)+'</span>':'')+
+          '<span class="arcspacer"></span>'+
+          '<span class="arccount">'+rows.length+' track'+(rows.length===1?'':'s')+'</span>'+
+          '<button class="miniact" data-cp="'+gi+'">Copy for Discord</button>'+
+          (isOwner()?'<button class="miniact danger" data-del="'+gi+'" aria-label="Delete this archived battle">\u2715</button>':'')+
+        '</summary>'+
+        '<div class="rack arcbody">'+
         rows.map(function(x){
           return '<div class="strip'+(x.won?' goldstrip':'')+'"><div class="num">'+(x.won?'\u265B':(x.was_champ?'\u265B':'\u00b7'))+'</div><div class="body">'+
             '<div class="who'+(x.won?' goldtxt':'')+'">'+esc(x.handle)+(x.won?' <span class="goldtxt" style="font-size:10px;letter-spacing:.1em">WON</span>':(x.was_champ?' <span style="font-size:10px;letter-spacing:.1em;color:var(--dim)">DEFENDED</span>':''))+'</div>'+
             '<div class="meta"><a href="'+esc(x.link)+'" target="_blank" rel="noopener">open track \u2197</a></div>'+
           '</div></div>';
-        }).join('')+'</div>';
+        }).join('')+'</div></details>';
     });
     z.innerHTML=html;
     z.querySelectorAll("[data-del]").forEach(function(b){
-      b.onclick=function(){
+      b.onclick=function(ev){
+        ev.preventDefault(); ev.stopPropagation();
         var k=order[parseInt(b.getAttribute("data-del"),10)];
         var when=new Date(k).toLocaleDateString();
         if(!confirm("Delete the archived battle from "+when+"? This is permanent.")) return;
@@ -954,7 +978,8 @@ function renderArchive(){
       };
     });
     z.querySelectorAll("[data-cp]").forEach(function(b){
-      b.onclick=function(){
+      b.onclick=function(ev){
+        ev.preventDefault(); ev.stopPropagation();
         var k=order[parseInt(b.getAttribute("data-cp"),10)];
         var rows=groups[k].map(function(x){return {handle:x.handle,link:x.link,won:x.won};});
         var champ=groups[k].filter(function(x){return x.won;})[0];
@@ -1067,7 +1092,7 @@ function renderSlot(){
   if(!PIN){ renderGate(); return; }
   app.innerHTML='<div class="wrap">'+mast('SLOT')+nav('slot')+
     '<div id="slotzone"><div class="empty">Loading prizes\u2026</div></div>'+
-    '<div class="foot"><span>v1.0</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
+    '<div class="foot"><span>v1.1</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
   loadSlotPrizes(function(){ paintSlot(); });
 }
 function paintSlot(){
@@ -1122,7 +1147,7 @@ function renderPrizes(){
   if(!PIN){ renderGate(); return; }
   app.innerHTML='<div class="wrap">'+mast('PRIZES')+nav('prizes')+
     '<div id="slotzone"><div class="empty">Loading\u2026</div></div>'+
-    '<div class="foot"><span>v1.0</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
+    '<div class="foot"><span>v1.1</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
   loadSlotPrizes(function(){ paintEditor(); });
 }
 // repaint the prize editor in place (NOT the slot machine, which shares #slotzone)
