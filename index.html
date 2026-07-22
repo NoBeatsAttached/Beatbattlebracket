@@ -652,7 +652,7 @@ function copyText(t, btn){
 
 function renderEnter(){
   app.innerHTML='<div class="wrap">'+mast('')+nav('enter')+'<div id="zone"></div>'+
-    '<div class="foot"><span>v1.1</span><span>BEAT BATTLE</span></div></div>';
+    '<div class="foot"><span>v1.2</span><span>BEAT BATTLE</span></div></div>';
   var built=false;
   onState(function(){
     var p=document.querySelector(".statuspill"); if(p) p.outerHTML=pill();
@@ -754,7 +754,7 @@ function bracketHTML(interactive){
 }
 function renderBracket(){
   app.innerHTML='<div class="wrap wide">'+mast('LIVE BRACKET')+nav('bracket')+'<div id="zone"></div>'+
-    '<div class="foot"><span>v1.1</span><span>BEAT BATTLE</span></div></div>';
+    '<div class="foot"><span>v1.2</span><span>BEAT BATTLE</span></div></div>';
   onState(function(){
     var p=document.querySelector(".statuspill"); if(p) p.outerHTML=pill();
     var z=document.getElementById("zone"); if(z) z.innerHTML=bracketHTML(false);
@@ -768,7 +768,7 @@ function renderBoard(){
     '<div class="dashbar" id="topbar"></div>'+
     '<div id="champrow" class="cmdref" style="display:none"></div>'+
     '<div id="zone"></div>'+
-    '<div class="foot"><span>v1.1</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
+    '<div class="foot"><span>v1.2</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
   if(isOwner()){
     var el=document.getElementById("champrow");
     if(el){
@@ -931,7 +931,7 @@ function renderOverlay(){
 function renderArchive(){
   app.innerHTML='<div class="wrap wide">'+mast('ARCHIVE')+nav('archive')+
     '<div id="zone"><div class="empty">Loading past battles\u2026</div></div>'+
-    '<div class="foot"><span>v1.1</span><span>BEAT BATTLE</span></div></div>';
+    '<div class="foot"><span>v1.2</span><span>BEAT BATTLE</span></div></div>';
   sb.from("bb_archive").select("*").order("battle_ts",{ascending:false}).order("won",{ascending:false}).order("handle")
   .then(function(r){
     var z=document.getElementById("zone"); if(!z) return;
@@ -1092,7 +1092,7 @@ function renderSlot(){
   if(!PIN){ renderGate(); return; }
   app.innerHTML='<div class="wrap">'+mast('SLOT')+nav('slot')+
     '<div id="slotzone"><div class="empty">Loading prizes\u2026</div></div>'+
-    '<div class="foot"><span>v1.1</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
+    '<div class="foot"><span>v1.2</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
   loadSlotPrizes(function(){ paintSlot(); });
 }
 function paintSlot(){
@@ -1122,8 +1122,8 @@ function spinSlot(){
   var reel=document.getElementById("reel");
   var spinbtn=document.getElementById("spinbtn"); spinbtn.disabled=true;
   var winner=pickWeighted();
-  var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var dur=reduce?2.6:8.2, cellH=64, loops=reduce?12:46;
+  // full spin for everyone — the host explicitly wants the suspense build
+  var dur=8.2, cellH=64, loops=46;
   // roll through the real prize names, landing on the winner in the last cell
   var seq=[];
   for(var i=0;i<loops;i++) seq.push(SLOT_PRIZES[i%SLOT_PRIZES.length]);
@@ -1147,7 +1147,7 @@ function renderPrizes(){
   if(!PIN){ renderGate(); return; }
   app.innerHTML='<div class="wrap">'+mast('PRIZES')+nav('prizes')+
     '<div id="slotzone"><div class="empty">Loading\u2026</div></div>'+
-    '<div class="foot"><span>v1.1</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
+    '<div class="foot"><span>v1.2</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
   loadSlotPrizes(function(){ paintEditor(); });
 }
 // repaint the prize editor in place (NOT the slot machine, which shares #slotzone)
