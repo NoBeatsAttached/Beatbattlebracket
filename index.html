@@ -1098,7 +1098,7 @@ function spinSlot(){
   var spinbtn=document.getElementById("spinbtn"); spinbtn.disabled=true;
   var winner=pickWeighted();
   var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var dur=reduce?1.4:3.9, cellH=64, loops=reduce?6:18;
+  var dur=reduce?2.0:5.6, cellH=64, loops=reduce?9:30;
   // roll through the real prize names, landing on the winner in the last cell
   var seq=[];
   for(var i=0;i<loops;i++) seq.push(SLOT_PRIZES[i%SLOT_PRIZES.length]);
@@ -1123,11 +1123,13 @@ function renderPrizes(){
   app.innerHTML='<div class="wrap">'+mast('PRIZES')+nav('prizes')+
     '<div id="slotzone"><div class="empty">Loading\u2026</div></div>'+
     '<div class="foot"><span>v1.0</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
-  loadSlotPrizes(function(){
-    var z=document.getElementById("slotzone"); if(!z) return;
-    z.innerHTML='<div class="hint" style="margin-bottom:16px">This list drives the <a href="#slot" style="color:var(--electric)">Slot</a>. Viewers never see this tab.</div>'+slotEditor();
-    wireEditor();
-  });
+  loadSlotPrizes(function(){ paintEditor(); });
+}
+// repaint the prize editor in place (NOT the slot machine, which shares #slotzone)
+function paintEditor(){
+  var z=document.getElementById("slotzone"); if(!z) return;
+  z.innerHTML='<div class="hint" style="margin-bottom:16px">This list drives the <a href="#slot" style="color:var(--electric)">Slot</a>. Viewers never see this tab.</div>'+slotEditor();
+  wireEditor();
 }
 function slotEditor(){
   var t=totalWeight();
@@ -1150,14 +1152,14 @@ function slotEditor(){
 }
 function wireEditor(){
   var rack=document.getElementById("prizerack"); if(!rack) return;
-  function commit(newList){ SLOT_PRIZES=newList; paintSlot(); }
+  function commit(newList){ SLOT_PRIZES=newList; paintEditor(); }
   rack.querySelectorAll("[data-del]").forEach(function(b){ b.onclick=function(){ var i=+b.getAttribute("data-del"); commit(SLOT_PRIZES.filter(function(_,x){return x!==i;})); }; });
   rack.querySelectorAll("[data-up]").forEach(function(b){ b.onclick=function(){ var i=+b.getAttribute("data-up"); if(i<=0)return; var a=SLOT_PRIZES.slice(); var t=a[i-1];a[i-1]=a[i];a[i]=t; commit(a); }; });
   rack.querySelectorAll("[data-dn]").forEach(function(b){ b.onclick=function(){ var i=+b.getAttribute("data-dn"); if(i>=SLOT_PRIZES.length-1)return; var a=SLOT_PRIZES.slice(); var t=a[i+1];a[i+1]=a[i];a[i]=t; commit(a); }; });
   rack.querySelectorAll(".pin-name").forEach(function(inp){ inp.onchange=function(){ var i=+inp.getAttribute("data-i"); SLOT_PRIZES[i].name=inp.value.trim(); }; });
-  rack.querySelectorAll(".pin-wt").forEach(function(inp){ inp.onchange=function(){ var i=+inp.getAttribute("data-w"); var v=parseInt(inp.value,10); SLOT_PRIZES[i].weight=(v>0?v:1); paintSlot(); }; });
+  rack.querySelectorAll(".pin-wt").forEach(function(inp){ inp.onchange=function(){ var i=+inp.getAttribute("data-w"); var v=parseInt(inp.value,10); SLOT_PRIZES[i].weight=(v>0?v:1); paintEditor(); }; });
   var add=document.getElementById("addprize"), np=document.getElementById("newprize"), nw=document.getElementById("newwt");
-  if(add) add.onclick=function(){ var v=np.value.trim(); if(!v)return; var w=parseInt(nw.value,10); SLOT_PRIZES=SLOT_PRIZES.concat([{name:v,weight:(w>0?w:10)}]); paintSlot(); };
+  if(add) add.onclick=function(){ var v=np.value.trim(); if(!v)return; var w=parseInt(nw.value,10); SLOT_PRIZES=SLOT_PRIZES.concat([{name:v,weight:(w>0?w:10)}]); paintEditor(); var f=document.getElementById("newprize"); if(f)f.focus(); };
   if(np) np.onkeydown=function(e){ if(e.key==="Enter"&&add) add.click(); };
   var save=document.getElementById("saveprizes");
   if(save) save.onclick=function(){
