@@ -803,6 +803,7 @@ function renderBoard(){
   app.innerHTML='<div class="wrap wide">'+mast('BOARD'+(isOwner()?'':' \u00b7 MOD'))+nav('board')+
     '<div class="dashbar" id="topbar"></div>'+
     '<div id="champrow" class="cmdref" style="display:none"></div>'+
+    '<div id="seasonrow" class="cmdref" style="display:none"></div>'+
     '<div id="zone"></div>'+
     '<div class="foot"><span>v1.2</span><span>'+(isOwner()?'HOST':'MOD')+'</span></div></div>';
   if(isOwner()){
@@ -820,6 +821,51 @@ function renderBoard(){
           if(!v){ alert("Type a code first."); return; }
           admin("set_champ_code",{p_text:v}).then(function(){ document.getElementById("cc-in").value=""; renderBoard(); });
         };
+      });
+    }
+  }
+  if(isOwner()){
+    var sr=document.getElementById("seasonrow");
+    if(sr){
+      sr.style.display="";
+      Promise.all([
+        sb.from("bb_season").select("*").eq("active",true).maybeSingle(),
+        sb.from("bb_archive").select("handle,total_votes,won,battle_ts")
+      ]).then(function(res){
+        var active=res[0].data, arch=res[1].data||[];
+        if(active){
+          // compute current leader to show what "End" would crown
+          var s0=new Date(active.start_ts).getTime();
+          var pl={};
+          arch.forEach(function(r){ if(new Date(r.battle_ts).getTime()>=s0){
+            var hh=r.handle; if(!pl[hh])pl[hh]={h:hh,v:0,e:0,w:0};
+            pl[hh].v+=(r.total_votes||0); pl[hh].e+=1; if(r.won)pl[hh].w+=1; } });
+          var arr=Object.keys(pl).map(function(k){var p=pl[k];p.pts=p.v+p.e*LEAGUE.participation+p.w*LEAGUE.winBonus;return p;});
+          arr.sort(function(a,b){return b.pts-a.pts||b.w-a.w||b.v-a.v;});
+          var lead=arr[0];
+          sr.innerHTML='Season: <b class="goldtxt">'+esc(active.name||"(unnamed)")+'</b> \u00b7 LIVE'+
+            (lead?' \u00b7 leader <b>'+esc(lead.h)+'</b> ('+lead.pts+' pts)':' \u00b7 no battles yet')+
+            ' <button class="miniact danger" id="endseason" style="margin-left:8px">End season & crown</button>';
+          document.getElementById("endseason").onclick=function(){
+            if(!lead){ if(!confirm("No one has scored yet. End season with no champion?")) return; }
+            var champ=lead?lead.h:"";
+            if(!confirm("End \""+(active.name||"season")+"\" and crown "+(champ||"no one")+" as champion? This freezes the standings.")) return;
+            sb.rpc("bb_season_end",{p_pin:PIN,p_champion:champ}).then(function(r){
+              if(r.error){ alert("Failed: "+r.error.message); } renderBoard();
+            });
+          };
+        } else {
+          sr.innerHTML='No active season. '+
+            '<input id="sname" placeholder="season name (e.g. Season 1)" style="width:200px;padding:6px 8px;font-size:12px">'+
+            ' <button class="miniact" id="startseason">Start season</button>';
+          document.getElementById("startseason").onclick=function(){
+            var nm=document.getElementById("sname").value.trim();
+            if(!nm){ alert("Name the season first."); return; }
+            sb.rpc("bb_season_start",{p_pin:PIN,p_name:nm}).then(function(r){
+              if(r.error){ alert("Failed: "+r.error.message); } renderBoard();
+            });
+          };
+        }
       });
     }
   }
@@ -976,62 +1022,76 @@ function renderStandings(){
   app.innerHTML='<div class="wrap wide">'+mast('LEAGUE')+nav('standings')+
     '<div id="zone"><div class="empty">Loading standings\u2026</div></div>'+
     '<div class="foot"><span>v1.0</span><span>SAMPLE FLIP LEAGUE</span></div></div>';
-  sb.from("bb_archive").select("*").order("battle_ts",{ascending:false}).then(function(r){
+  Promise.all([
+    sb.from("bb_season").select("*").order("start_ts",{ascending:false}),
+    sb.from("bb_archive").select("*").order("battle_ts",{ascending:false})
+  ]).then(function(res){
     var z=document.getElementById("zone"); if(!z) return;
-    if(r.error||!r.data||!r.data.length){
-      z.innerHTML='<div class="empty"><b>No league data yet.</b>Standings build automatically from each battle. Run one and reset to see the table fill in.</div>'; return;
+    var seasons=(res[0].data)||[], arch=(res[1].data)||[];
+    if(!seasons.length){
+      z.innerHTML='<div class="empty"><b>No season running yet.</b>'+
+        (isOwner()?'Start Season 1 from the Board to begin scoring.':'The league kicks off when the host starts a season.')+'</div>'; return;
     }
-    // group rows by month
-    var byMonth={}, monthOrder=[];
-    r.data.forEach(function(row){
-      var d=new Date(row.battle_ts); var mk=monthKey(d);
-      if(!byMonth[mk]){ byMonth[mk]={label:monthLabel(d), when:d, battles:{}, rows:[]}; monthOrder.push(mk); }
-      byMonth[mk].rows.push(row);
-      byMonth[mk].battles[row.battle_ts]=true;
-    });
-    // current (latest) month is default view; also let user pick past months
-    var cur=monthOrder[0];
-    function tableFor(mk){
-      var M=byMonth[mk];
-      var players={};
-      M.rows.forEach(function(row){
-        var h=row.handle; if(!players[h]) players[h]={handle:h, votes:0, entries:0, wins:0};
-        players[h].votes += (row.total_votes||0);
-        players[h].entries += 1;
-        if(row.won) players[h].wins += 1;
+    var active=seasons.filter(function(s){return s.active;})[0];
+    var past=seasons.filter(function(s){return !s.active;});
+    // default view = active season if any, else most recent past
+    var viewId=(active?active.id:(past[0]&&past[0].id));
+
+    function scoreSeason(season){
+      var s0=new Date(season.start_ts).getTime();
+      var s1=season.end_ts?new Date(season.end_ts).getTime():Infinity;
+      var rows=arch.filter(function(r){ var t=new Date(r.battle_ts).getTime(); return t>=s0 && t<=s1; });
+      var players={}, battles={};
+      rows.forEach(function(row){
+        battles[row.battle_ts]=true;
+        var hh=row.handle; if(!players[hh]) players[hh]={handle:hh,votes:0,entries:0,wins:0};
+        players[hh].votes+=(row.total_votes||0);
+        players[hh].entries+=1;
+        if(row.won) players[hh].wins+=1;
       });
       var list=Object.keys(players).map(function(k){
-        var p=players[k];
-        p.points = p.votes + p.entries*LEAGUE.participation + p.wins*LEAGUE.winBonus;
-        return p;
+        var p=players[k]; p.points=p.votes+p.entries*LEAGUE.participation+p.wins*LEAGUE.winBonus; return p;
       });
-      list.sort(function(a,b){ return b.points-a.points || b.wins-a.wins || b.votes-a.votes; });
-      var battleCount=Object.keys(M.battles).length;
-      return {list:list, battles:battleCount, label:M.label};
+      list.sort(function(a,b){return b.points-a.points||b.wins-a.wins||b.votes-a.votes;});
+      return {list:list, battles:Object.keys(battles).length};
     }
-    function paint(mk){
-      var t=tableFor(mk);
-      var picker = monthOrder.length>1 ? '<select id="monthpick" class="monthpick">'+
-        monthOrder.map(function(k){ return '<option value="'+k+'"'+(k===mk?' selected':'')+'>'+byMonth[k].label+'</option>'; }).join('')+'</select>' : '';
+
+    function paint(id){
+      var season=seasons.filter(function(s){return s.id===id;})[0]; if(!season) season=active||past[0];
+      var t=scoreSeason(season);
+      var picker = seasons.length>1 ? '<select id="seasonpick" class="monthpick">'+
+        seasons.map(function(s){ return '<option value="'+s.id+'"'+(s.id===season.id?' selected':'')+'>'+esc(s.name||"Season")+(s.active?" (live)":"")+'</option>'; }).join('')+'</select>' : '';
+      var d0=new Date(season.start_ts).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+      var d1=season.end_ts?new Date(season.end_ts).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'now';
       var leader=t.list[0];
-      var html='<div class="lgtop"><div class="lgtitle">SAMPLE FLIP LEAGUE</div>'+picker+'</div>'+
-        '<div class="lgsub">'+t.label+' \u00b7 '+t.battles+' battle'+(t.battles===1?'':'s')+' \u00b7 votes + '+LEAGUE.participation+'/entry + '+LEAGUE.winBonus+'/win</div>';
-      if(leader) html+='<div class="lgleader"><span class="lglabel">Month leader</span><span class="lgname">\u265B '+esc(leader.handle)+'</span><span class="lgpts">'+leader.points+' pts</span></div>';
-      html+='<div class="lgtable"><div class="lgrow lghead"><span class="lgrank">#</span><span class="lgh">Producer</span><span class="lgc">Pts</span><span class="lgc">Votes</span><span class="lgc">W</span><span class="lgc">Btl</span></div>';
-      t.list.forEach(function(p,i){
-        html+='<div class="lgrow'+(i===0?' first':'')+'"><span class="lgrank">'+(i+1)+'</span>'+
-          '<span class="lgh">'+esc(p.handle)+(i===0?' \u265B':'')+'</span>'+
-          '<span class="lgc lgptsval">'+p.points+'</span>'+
-          '<span class="lgc">'+p.votes+'</span>'+
-          '<span class="lgc">'+p.wins+'</span>'+
-          '<span class="lgc">'+p.entries+'</span></div>';
-      });
-      html+='</div>';
+      var html='<div class="lgtop"><div class="lgtitle">'+esc(season.name||"SAMPLE FLIP LEAGUE")+'</div>'+picker+'</div>'+
+        '<div class="lgsub">'+d0+' \u2013 '+d1+' \u00b7 '+t.battles+' battle'+(t.battles===1?'':'s')+
+        ' \u00b7 votes + '+LEAGUE.participation+'/entry + '+LEAGUE.winBonus+'/win'+
+        (season.active?'':' \u00b7 ENDED')+'</div>';
+      if(!season.active && season.champion){
+        html+='<div class="lgleader"><span class="lglabel">Season Champion</span><span class="lgname">\u265B '+esc(season.champion)+'</span></div>';
+      } else if(leader){
+        html+='<div class="lgleader"><span class="lglabel">'+(season.active?'Current leader':'Top')+'</span><span class="lgname">\u265B '+esc(leader.handle)+'</span><span class="lgpts">'+leader.points+' pts</span></div>';
+      }
+      if(!t.list.length){
+        html+='<div class="empty">No battles scored in this season yet. Run one and reset to see the table fill in.</div>';
+      } else {
+        html+='<div class="lgtable"><div class="lgrow lghead"><span class="lgrank">#</span><span class="lgh">Producer</span><span class="lgc">Pts</span><span class="lgc">Votes</span><span class="lgc">W</span><span class="lgc">Btl</span></div>';
+        t.list.forEach(function(p,i){
+          html+='<div class="lgrow'+(i===0?' first':'')+'"><span class="lgrank">'+(i+1)+'</span>'+
+            '<span class="lgh">'+esc(p.handle)+(i===0?' \u265B':'')+'</span>'+
+            '<span class="lgc lgptsval">'+p.points+'</span>'+
+            '<span class="lgc">'+p.votes+'</span>'+
+            '<span class="lgc">'+p.wins+'</span>'+
+            '<span class="lgc">'+p.entries+'</span></div>';
+        });
+        html+='</div>';
+      }
       z.innerHTML=html;
-      var mp=document.getElementById("monthpick");
-      if(mp) mp.onchange=function(){ paint(mp.value); };
+      var sp=document.getElementById("seasonpick");
+      if(sp) sp.onchange=function(){ paint(sp.value); };
     }
-    paint(cur);
+    paint(viewId);
   });
 }
 function renderArchive(){
